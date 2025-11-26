@@ -4,8 +4,8 @@ using UnityEngine;
 /// Robust game-over detector:
 /// - Primary: if object's Y <= fallYThreshold -> GameOver()
 /// - Optional: if this object enters a trigger collider tagged "DeathPlane" -> GameOver()
-/// - Disables Doofus movement component (DoofusMovement) on game over to prevent continued movement.
-/// - Writes helpful Debug.Log lines so you can see what happened in Console.
+/// - Disables DoofusMovement and Rigidbody motion on game over to prevent continued movement.
+/// - Helpful Debug.Log lines to assist debugging in Console.
 /// </summary>
 [DisallowMultipleComponent]
 public class FallGameOver : MonoBehaviour
@@ -31,7 +31,7 @@ public class FallGameOver : MonoBehaviour
         // Check Y threshold
         if (transform.position.y <= fallYThreshold)
         {
-            Debug.Log($"[FallGameOver] Y threshold reached: y={transform.position.y} <= {fallYThreshold}");
+            Debug.Log($"[FallGameOver] Y threshold reached: y={transform.position.y:F2} <= {fallYThreshold:F2}");
             TriggerGameOver("YThreshold");
         }
     }
@@ -40,7 +40,7 @@ public class FallGameOver : MonoBehaviour
     {
         if (invoked) return;
 
-        if (!string.IsNullOrEmpty(deathPlaneTag))
+        if (!string.IsNullOrEmpty(deathPlaneTag) && other != null)
         {
             if (other.CompareTag(deathPlaneTag))
             {
@@ -54,22 +54,25 @@ public class FallGameOver : MonoBehaviour
     {
         invoked = true;
 
-        // Try disable movement so it visually stops
+        // Disable move input/behaviour if present
         var move = GetComponent<DoofusMovement>();
         if (move != null)
         {
-            try { move.enabled = false; Debug.Log("[FallGameOver] Disabled DoofusMovement."); } catch { }
+            move.enabled = false;
+            Debug.Log("[FallGameOver] Disabled DoofusMovement.");
         }
 
-        // Try disable Rigidbody forces (optional)
+        // Freeze physics and clear velocities
         var rb = GetComponent<Rigidbody>();
         if (rb != null)
         {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
             rb.isKinematic = true;
-            Debug.Log("[FallGameOver] Set Rigidbody.isKinematic = true");
+            Debug.Log("[FallGameOver] Rigidbody stopped and set to kinematic.");
         }
 
-        // Call GameStateManager
+        // Try to notify GameStateManager
         if (GameStateManager.Instance != null)
         {
             Debug.Log($"[FallGameOver] Calling GameStateManager.GameOver() (cause={cause})");
@@ -77,7 +80,9 @@ public class FallGameOver : MonoBehaviour
         }
         else
         {
-            Debug.LogError("[FallGameOver] GameStateManager.Instance is NULL. Ensure GameStateManager exists in the scene.");
+            // Still try to show UI fallback if UIManager exists (defensive)
+            Debug.LogError("[FallGameOver] GameStateManager.Instance is NULL. Making fallback call to UIManager.ShowGameOver() if available.");
+            UIManager.Instance?.ShowGameOver();
         }
     }
 }

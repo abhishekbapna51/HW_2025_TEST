@@ -2,60 +2,98 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.SceneManagement;
-
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
-/// <summary>
-/// UIManager: controls Start and GameOver UI, plus simple music control.
-/// - Start button: starts game, starts (and loops) music
-/// - GameOver: stops music, shows only Restart button (no quit, no final score)
-/// - Restart: reloads via GameStateManager.Restart() if available, otherwise reloads active scene
-/// </summary>
 public class UIManager : MonoBehaviour
 {
     public static UIManager Instance { get; private set; }
 
-    [Header("Panels")]
-    public GameObject startPanel;      // top-level start panel (big play button)
-    public GameObject gameOverPanel;   // top-level game over panel (should contain restartButton)
+    // NOTE: these may be null between reloads; we rebind them on scene loaded.
+    [Header("Panels (will be auto-bound if left null)")]
+    public GameObject startPanel;
+    public GameObject gameOverPanel;
 
-    [Header("Start Panel")]
+    [Header("Buttons / texts (auto-bound if left null)")]
     public Button startButton;
-
-    [Header("Game Over Panel (we will only expose Restart for the player)")]
+    public TMP_Text finalScoreText;
     public Button restartButton;
-
-    // OPTIONAL inspector references we will hide on GameOver
-    [Header("Optional UI (will be hidden on Game Over)")]
-    public TMP_Text finalScoreText;    // optional final score text (we will hide it on show)
-    public Button quitButton;          // optional quit button (we will hide it on show)
-
-    [Header("Audio")]
-    [Tooltip("Assign the AudioSource that plays background music. Set Play On Awake = false on this source.")]
-    public AudioSource musicSource;
-
-    [Header("Behavior")]
-    [Tooltip("If true the UIManager will try to use GameStateManager.Instance.Restart() when Restart is pressed.")]
-    public bool useGameStateManagerForRestart = true;
+    public Button quitButton;
 
     private void Awake()
     {
-        // singleton + persist
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-
+        // singleton
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
+
+        // Subscribe to scene loaded so we can re-bind UI from new scene
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private void OnDestroy()
+    {
+        // cleanup
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+        if (Instance == this) Instance = null;
     }
 
     private void Start()
     {
-        // Bind buttons (remove previous listeners to avoid duplicates)
+        // Try to bind now (in case the UI is already in the scene)
+        FindAndBindUI();
+        // Show start and pause
+        ShowStart(resetScore: true);
+    }
+
+    // Called after each scene load
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        // re-find UI elements in the freshly loaded scene and re-wire
+        FindAndBindUI();
+
+        // After a reload we want the Start screen visible and game paused
+        ShowStart(resetScore: true);
+    }
+
+    // Finds UI objects by conventional names and wires listeners.
+    // Change the names below if your Hierarchy uses different names.
+    private void FindAndBindUI()
+    {
+        // If someone pre-assigned in inspector, keep that — otherwise try to find
+        if (startPanel == null)
+            startPanel = GameObject.Find("StartPanel");
+
+        if (gameOverPanel == null)
+            gameOverPanel = GameObject.Find("GameOverPanel");
+
+        // Buttons & final score
+        if (startButton == null)
+        {
+            var sbGo = GameObject.Find("StartButton");
+            if (sbGo != null) startButton = sbGo.GetComponent<Button>();
+        }
+
+        if (restartButton == null)
+        {
+            var rbGo = GameObject.Find("RestartButton");
+            if (rbGo != null) restartButton = rbGo.GetComponent<Button>();
+        }
+
+        if (quitButton == null)
+        {
+            var qbGo = GameObject.Find("QuitButton");
+            if (qbGo != null) quitButton = qbGo.GetComponent<Button>();
+        }
+
+        if (finalScoreText == null)
+        {
+            var fsGo = GameObject.Find("FinalScoreText");
+            if (fsGo != null) finalScoreText = fsGo.GetComponent<TMP_Text>();
+        }
+
+        // Wire listeners safely (remove previous so we don't duplicate)
         if (startButton != null)
         {
             startButton.onClick.RemoveAllListeners();
@@ -74,142 +112,61 @@ public class UIManager : MonoBehaviour
             quitButton.onClick.AddListener(OnQuitPressed);
         }
 
-        // Ensure music doesn't auto-play even if inspector left it on
-        if (musicSource != null && musicSource.playOnAwake)
-        {
-            musicSource.playOnAwake = false;
-        }
-
-        // At launch show Start and pause game
-        ShowStart(resetScore: true);
-        HideGameOver();
+        // Ensure panels exist; if null just log a warning (so you can fix naming)
+        if (startPanel == null) Debug.LogWarning("UIManager: StartPanel not found in scene.");
+        if (gameOverPanel == null) Debug.LogWarning("UIManager: GameOverPanel not found in scene.");
     }
 
-    private void OnDestroy()
-    {
-        if (Instance == this) Instance = null;
-        // Clean up listeners
-        if (startButton != null) startButton.onClick.RemoveListener(OnStartPressed);
-        if (restartButton != null) restartButton.onClick.RemoveListener(OnRestartPressed);
-        if (quitButton != null) quitButton.onClick.RemoveListener(OnQuitPressed);
-    }
-
-    // ----------------
-    // Public UI control
-    // ----------------
-
-    /// <summary>
-    /// Show the Start UI and pause gameplay. Optionally reset score.
-    /// </summary>
+    // Show start UI and pause game; optionally reset score
     public void ShowStart(bool resetScore = false)
     {
         if (startPanel != null) startPanel.SetActive(true);
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
 
         Time.timeScale = 0f;
-
         if (resetScore) ScoreManager.Instance?.ResetScore();
-
-        // Stop music to ensure a fresh start (safe)
-        if (musicSource != null && musicSource.isPlaying)
-        {
-            musicSource.Stop();
-            Debug.Log("[UIManager] Stopped music on ShowStart.");
-        }
     }
 
-    public void HideStart()
-    {
-        if (startPanel != null) startPanel.SetActive(false);
-    }
+    public void HideStart() { if (startPanel != null) startPanel.SetActive(false); }
 
-    /// <summary>
-    /// Show Game Over UI. We will show only the Restart option and hide final score / quit button.
-    /// Also stop music and pause time.
-    /// </summary>
     public void ShowGameOver()
     {
-        // Hide Final Score and Quit if present (user requested only Restart)
-        if (finalScoreText != null) finalScoreText.gameObject.SetActive(false);
-        if (quitButton != null) quitButton.gameObject.SetActive(false);
-
-        // Ensure Restart button is visible and interactable
-        if (restartButton != null) restartButton.gameObject.SetActive(true);
-
         if (gameOverPanel != null) gameOverPanel.SetActive(true);
+        if (startPanel != null) startPanel.SetActive(false);
 
-        // Stop music immediately
-        if (musicSource != null && musicSource.isPlaying)
-        {
-            musicSource.Stop();
-            Debug.Log("[UIManager] Music stopped on Game Over.");
-        }
+        // Update final score text
+        if (finalScoreText != null)
+            finalScoreText.text = ScoreManager.Instance != null ? ScoreManager.Instance.Score.ToString() : "0";
 
         // Pause gameplay
         Time.timeScale = 0f;
     }
 
-    public void HideGameOver()
-    {
-        if (gameOverPanel != null) gameOverPanel.SetActive(false);
+    public void HideGameOver() { if (gameOverPanel != null) gameOverPanel.SetActive(false); }
 
-        // If you want finalScoreText visible again for a subsequent run, re-enable it here.
-        if (finalScoreText != null) finalScoreText.gameObject.SetActive(true);
-        if (quitButton != null) quitButton.gameObject.SetActive(true);
-    }
-
-    // ----------------
     // Button callbacks
-    // ----------------
-
-    /// <summary>Called when Start button is pressed.</summary>
     public void OnStartPressed()
     {
-        // Hide start UI and resume gameplay
         HideStart();
         HideGameOver();
-
         ScoreManager.Instance?.ResetScore();
-
-        // Start/resume music (user gesture)
-        if (musicSource != null)
-        {
-            musicSource.loop = true;
-            if (!musicSource.isPlaying)
-            {
-                musicSource.Play();
-                Debug.Log("[UIManager] Music started on Start button.");
-            }
-        }
-
-        // Unpause
         Time.timeScale = 1f;
-
-        // Delegates to GameStateManager if present
         GameStateManager.Instance?.StartGame();
     }
 
-    /// <summary>Called when Restart button is pressed.</summary>
     public void OnRestartPressed()
     {
-        // Ensure time restored before reload
+        // Make sure the game is in a running state before reload
         Time.timeScale = 1f;
 
-        // Stop music (will restart on Start press after reload)
-        if (musicSource != null && musicSource.isPlaying)
-        {
-            musicSource.Stop();
-            Debug.Log("[UIManager] Music stopped on Restart.");
-        }
-
-        // Prefer GameStateManager.Restart if you have it
-        if (useGameStateManagerForRestart && GameStateManager.Instance != null)
+        // Prefer GameStateManager.Restart (if available)
+        if (GameStateManager.Instance != null)
         {
             GameStateManager.Instance.Restart();
             return;
         }
 
-        // Fallback: reload current active scene
+        // fallback: reload current scene
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 
