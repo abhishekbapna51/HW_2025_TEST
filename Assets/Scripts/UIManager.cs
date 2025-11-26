@@ -6,12 +6,15 @@ using UnityEngine.SceneManagement;
 using UnityEditor;
 #endif
 
+/// <summary>
+/// Persistent UIManager that re-binds scene UI on every scene load and manages music start/stop.
+/// Robust restart handling: disables restart button during reload to avoid double-click issues.
+/// </summary>
 public class UIManager : MonoBehaviour
 {
     public static UIManager Instance { get; private set; }
 
-    // NOTE: these may be null between reloads; we rebind them on scene loaded.
-    [Header("Panels (will be auto-bound if left null)")]
+    [Header("Panels (auto-bound if left null)")]
     public GameObject startPanel;
     public GameObject gameOverPanel;
 
@@ -21,6 +24,16 @@ public class UIManager : MonoBehaviour
     public Button restartButton;
     public Button quitButton;
 
+    [Header("Music (optional)")]
+    [Tooltip("Optional: assign AudioSource here (or name your GameObject 'music' so it auto-finds). Play On Awake should be OFF.")]
+    public AudioSource musicSource;
+
+    [Header("Behavior")]
+    public bool autoFindByName = true; // try to find objects by name if inspector fields are null
+
+    // internal state to avoid duplicate restarts
+    bool isReloading = false;
+
     private void Awake()
     {
         // singleton
@@ -28,69 +41,94 @@ public class UIManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        // Subscribe to scene loaded so we can re-bind UI from new scene
         SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
     private void OnDestroy()
     {
-        // cleanup
         SceneManager.sceneLoaded -= OnSceneLoaded;
         if (Instance == this) Instance = null;
     }
 
     private void Start()
     {
-        // Try to bind now (in case the UI is already in the scene)
+        // Try to bind now (if UI already present)
         FindAndBindUI();
-        // Show start and pause
+        // Pause and show start
         ShowStart(resetScore: true);
     }
 
-    // Called after each scene load
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        // re-find UI elements in the freshly loaded scene and re-wire
+        Debug.Log($"[UIManager] Scene loaded: {scene.name}. Rebinding UI and Audio.");
+        isReloading = false; // allow restart again
         FindAndBindUI();
 
-        // After a reload we want the Start screen visible and game paused
+        // After reload show Start panel and pause (so user clicks Start to begin)
         ShowStart(resetScore: true);
+
+        // ensure restart button interactable
+        if (restartButton != null) restartButton.interactable = true;
     }
 
-    // Finds UI objects by conventional names and wires listeners.
-    // Change the names below if your Hierarchy uses different names.
+    /// <summary>
+    /// Finds and binds UI controls and music (if left null in inspector).
+    /// Uses GameObject.Find with conventional names (change names in this file if your objects are named differently).
+    /// </summary>
     private void FindAndBindUI()
     {
-        // If someone pre-assigned in inspector, keep that — otherwise try to find
-        if (startPanel == null)
+        // Panels
+        if (startPanel == null && autoFindByName)
             startPanel = GameObject.Find("StartPanel");
 
-        if (gameOverPanel == null)
+        if (gameOverPanel == null && autoFindByName)
             gameOverPanel = GameObject.Find("GameOverPanel");
 
-        // Buttons & final score
-        if (startButton == null)
+        // Buttons & texts
+        if (startButton == null && autoFindByName)
         {
             var sbGo = GameObject.Find("StartButton");
             if (sbGo != null) startButton = sbGo.GetComponent<Button>();
         }
 
-        if (restartButton == null)
+        if (restartButton == null && autoFindByName)
         {
             var rbGo = GameObject.Find("RestartButton");
             if (rbGo != null) restartButton = rbGo.GetComponent<Button>();
         }
 
-        if (quitButton == null)
+        if (quitButton == null && autoFindByName)
         {
             var qbGo = GameObject.Find("QuitButton");
             if (qbGo != null) quitButton = qbGo.GetComponent<Button>();
         }
 
-        if (finalScoreText == null)
+        if (finalScoreText == null && autoFindByName)
         {
             var fsGo = GameObject.Find("FinalScoreText");
             if (fsGo != null) finalScoreText = fsGo.GetComponent<TMP_Text>();
+        }
+
+        // Music auto-find: look for GameObject named "music" or "Music"
+        if (musicSource == null && autoFindByName)
+        {
+            var mg = GameObject.Find("music") ?? GameObject.Find("Music");
+            if (mg != null)
+            {
+                var src = mg.GetComponent<AudioSource>();
+                if (src != null)
+                {
+                    musicSource = src;
+                    Debug.Log("[UIManager] Auto-bound musicSource from GameObject named 'music' / 'Music'.");
+                }
+            }
+        }
+
+        // Safety: ensure PlayOnAwake is off for musicSource (we start music on Start button click)
+        if (musicSource != null && musicSource.playOnAwake)
+        {
+            musicSource.playOnAwake = false;
+            Debug.Log("[UIManager] musicSource.playOnAwake was true — set to false to prevent auto-play.");
         }
 
         // Wire listeners safely (remove previous so we don't duplicate)
@@ -99,12 +137,15 @@ public class UIManager : MonoBehaviour
             startButton.onClick.RemoveAllListeners();
             startButton.onClick.AddListener(OnStartPressed);
         }
+        else Debug.LogWarning("[UIManager] startButton not found or assigned.");
 
         if (restartButton != null)
         {
             restartButton.onClick.RemoveAllListeners();
             restartButton.onClick.AddListener(OnRestartPressed);
+            restartButton.interactable = true;
         }
+        else Debug.LogWarning("[UIManager] restartButton not found or assigned.");
 
         if (quitButton != null)
         {
@@ -112,19 +153,28 @@ public class UIManager : MonoBehaviour
             quitButton.onClick.AddListener(OnQuitPressed);
         }
 
-        // Ensure panels exist; if null just log a warning (so you can fix naming)
-        if (startPanel == null) Debug.LogWarning("UIManager: StartPanel not found in scene.");
-        if (gameOverPanel == null) Debug.LogWarning("UIManager: GameOverPanel not found in scene.");
+        // Ensure panels exist
+        if (startPanel == null) Debug.LogWarning("[UIManager] StartPanel not found in scene.");
+        if (gameOverPanel == null) Debug.LogWarning("[UIManager] GameOverPanel not found in scene.");
     }
 
-    // Show start UI and pause game; optionally reset score
+    // ---------- UI control ----------
+
     public void ShowStart(bool resetScore = false)
     {
         if (startPanel != null) startPanel.SetActive(true);
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
 
         Time.timeScale = 0f;
+
         if (resetScore) ScoreManager.Instance?.ResetScore();
+
+        // Stop music on showing Start to ensure clean state
+        if (musicSource != null && musicSource.isPlaying)
+        {
+            musicSource.Stop();
+            Debug.Log("[UIManager] musicSource stopped on ShowStart.");
+        }
     }
 
     public void HideStart() { if (startPanel != null) startPanel.SetActive(false); }
@@ -134,40 +184,82 @@ public class UIManager : MonoBehaviour
         if (gameOverPanel != null) gameOverPanel.SetActive(true);
         if (startPanel != null) startPanel.SetActive(false);
 
-        // Update final score text
+        // Update final score if visible
         if (finalScoreText != null)
             finalScoreText.text = ScoreManager.Instance != null ? ScoreManager.Instance.Score.ToString() : "0";
 
-        // Pause gameplay
+        // Stop music on Game Over
+        if (musicSource != null && musicSource.isPlaying)
+        {
+            musicSource.Stop();
+            Debug.Log("[UIManager] musicSource stopped on GameOver.");
+        }
+
         Time.timeScale = 0f;
     }
 
     public void HideGameOver() { if (gameOverPanel != null) gameOverPanel.SetActive(false); }
 
-    // Button callbacks
+    // ---------- Button callbacks ----------
+
     public void OnStartPressed()
     {
         HideStart();
         HideGameOver();
         ScoreManager.Instance?.ResetScore();
+
+        // Start music (user gesture)
+        if (musicSource != null)
+        {
+            musicSource.loop = true;
+            if (!musicSource.isPlaying)
+            {
+                musicSource.Play();
+                Debug.Log("[UIManager] musicSource.Play() called on Start.");
+            }
+        }
+
         Time.timeScale = 1f;
         GameStateManager.Instance?.StartGame();
     }
 
     public void OnRestartPressed()
     {
-        // Make sure the game is in a running state before reload
-        Time.timeScale = 1f;
-
-        // Prefer GameStateManager.Restart (if available)
-        if (GameStateManager.Instance != null)
+        // Prevent duplicate restarts while reload is in progress
+        if (isReloading)
         {
-            GameStateManager.Instance.Restart();
+            Debug.Log("[UIManager] Restart requested but reload already in progress — ignoring duplicate click.");
             return;
         }
 
-        // fallback: reload current scene
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        isReloading = true;
+
+        // Ensure time restored before reload
+        Time.timeScale = 1f;
+
+        // Stop music here (it will be restarted on next Start press)
+        if (musicSource != null && musicSource.isPlaying)
+        {
+            musicSource.Stop();
+            Debug.Log("[UIManager] musicSource stopped on Restart.");
+        }
+
+        // Disable restart button immediately to avoid double-clicks
+        if (restartButton != null) restartButton.interactable = false;
+
+        // Prefer GameStateManager.Restart if available (it will do Time.timeScale reset + LoadScene)
+        if (GameStateManager.Instance != null)
+        {
+            Debug.Log("[UIManager] Delegating restart to GameStateManager.Restart()");
+            GameStateManager.Instance.Restart();
+            // GameStateManager.Restart will trigger Scene load; OnSceneLoaded will reset isReloading = false
+            return;
+        }
+
+        // Fallback: async reload the active scene (so OnSceneLoaded fires and rebind occurs)
+        Debug.Log("[UIManager] No GameStateManager found — using SceneManager.LoadSceneAsync fallback.");
+        SceneManager.LoadSceneAsync(SceneManager.GetActiveScene().name);
+        // OnSceneLoaded will set isReloading = false
     }
 
     private void OnQuitPressed()

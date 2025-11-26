@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 
 [System.Serializable]
-public class PlayerData { public float speed = 3f; }
+public class PlayerData { public float speed = 5f; }
 
 [System.Serializable]
 public class PulpitData

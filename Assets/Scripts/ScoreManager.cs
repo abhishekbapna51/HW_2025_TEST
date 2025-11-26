@@ -1,53 +1,102 @@
 using UnityEngine;
 using TMPro;
+using UnityEngine.SceneManagement;
 
+/// <summary>
+/// Persistent ScoreManager that re-binds the score TMP text on scene loads
+/// so score UI keeps updating correctly across restarts.
+/// </summary>
 public class ScoreManager : MonoBehaviour
 {
     public static ScoreManager Instance { get; private set; }
 
-    public int Score { get; private set; }
+    // Score value (persisted across scene reloads unless ResetScore is called)
+    public int Score { get; private set; } = 0;
 
-    [Header("UI (assign these in the Inspector)")]
-    public TMP_Text scoreBigText;   // big green number (top-center)
-    public TMP_Text scoreLabelText; // small "score" label under the number
+    [Header("Optional: assign in inspector (will auto-find if null)")]
+    public TMP_Text scoreText;
+
+    [Header("Auto-find names (if you used different names change them)")]
+    public string[] scoreTextNames = new string[] { "ScoreBigText", "ScoreText", "Score" };
 
     private void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
+        // singleton
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
-        Debug.Log("[ScoreManager] Awake - instance set");
+
+        // listen for scene loads to rebind UI references
+        SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
     private void Start()
     {
-        ResetScore();
-        Debug.Log("[ScoreManager] Start - score reset");
+        // Try to find scoreText immediately (scene may already be loaded)
+        TryBindScoreText();
+        UpdateUI();
+    }
+
+    private void OnDestroy()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+        if (Instance == this) Instance = null;
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        // Rebind the score text after every scene load
+        TryBindScoreText();
+        // Ensure UI reflects current Score after rebinding
+        UpdateUI();
+    }
+
+    private void TryBindScoreText()
+    {
+        if (scoreText != null) return;
+
+        // Try by name(s)
+        foreach (var n in scoreTextNames)
+        {
+            if (string.IsNullOrEmpty(n)) continue;
+            var go = GameObject.Find(n);
+            if (go != null)
+            {
+                var tmp = go.GetComponent<TMP_Text>();
+                if (tmp != null)
+                {
+                    scoreText = tmp;
+                    Debug.Log($"[ScoreManager] Bound scoreText to GameObject '{n}'.");
+                    return;
+                }
+            }
+        }
+
+        // If still null, try to find any TMP with tag "Score" (if used)
+        // (Optional: you can assign manually in inspector to avoid auto-finding)
+        if (scoreText == null)
+        {
+            Debug.LogWarning("[ScoreManager] scoreText not found automatically. Assign in inspector or ensure a GameObject exists named ScoreBigText/ScoreText/Score.");
+        }
     }
 
     public void AddScore(int amount = 1)
     {
         Score += amount;
         UpdateUI();
-        Debug.Log($"[ScoreManager] AddScore called. New Score = {Score}");
     }
 
     public void ResetScore()
     {
         Score = 0;
         UpdateUI();
-        Debug.Log("[ScoreManager] ResetScore executed");
     }
 
     private void UpdateUI()
     {
-        if (scoreBigText != null)
-            scoreBigText.text = Score.ToString();
-        if (scoreLabelText != null)
-            scoreLabelText.text = "score";
+        if (scoreText != null)
+        {
+            scoreText.text = Score.ToString();
+        }
     }
 }

@@ -4,31 +4,46 @@ using UnityEngine;
 public class DoofusMovement : MonoBehaviour
 {
     private Rigidbody rb;
-    private float moveSpeed = 4f; // default until JSON loads
+
+    [Header("Base Movement Speed (used if JSON not loaded)")]
+    public float inspectorSpeed = 4f;   // faster default speed
+
+    private float activeSpeed;          // final speed used
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+        activeSpeed = inspectorSpeed;   // initial speed
     }
 
-    // Use FixedUpdate for physics movement
     private void FixedUpdate()
     {
-        // Update speed from JSON if available (safe null checks)
-        if (GameConfig.Instance != null && GameConfig.Instance.IsLoaded && 
-            GameConfig.Instance.diary != null && GameConfig.Instance.diary.player_data != null)
+        // Load speed from JSON if available (this overrides inspector)
+        if (GameConfig.Instance != null &&
+            GameConfig.Instance.IsLoaded &&
+            GameConfig.Instance.diary != null &&
+            GameConfig.Instance.diary.player_data != null)
         {
-            moveSpeed = GameConfig.Instance.diary.player_data.speed;
+            activeSpeed = GameConfig.Instance.diary.player_data.speed;
+
+            // OPTIONAL: Multiply JSON speed for faster gameplay 
+            activeSpeed *= 1.5f;  // uncomment if needed
+        }
+        else
+        {
+            // fallback → use inspector speed
+            activeSpeed = inspectorSpeed;
         }
 
-        float h = Input.GetAxisRaw("Horizontal"); // A/D or Left/Right arrows
-        float v = Input.GetAxisRaw("Vertical");   // W/S or Up/Down arrows
+        // Input
+        float h = Input.GetAxisRaw("Horizontal");
+        float v = Input.GetAxisRaw("Vertical");
 
         Vector3 dir = new Vector3(h, 0f, v).normalized;
 
-        if (dir.sqrMagnitude > 0.0001f)
+        if (dir.sqrMagnitude > 0.001f)
         {
-            Vector3 newPos = rb.position + dir * moveSpeed * Time.fixedDeltaTime;
+            Vector3 newPos = rb.position + dir * activeSpeed * Time.fixedDeltaTime;
             rb.MovePosition(newPos);
         }
     }

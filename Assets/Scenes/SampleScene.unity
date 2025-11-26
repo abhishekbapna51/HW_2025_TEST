@@ -775,8 +775,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a4038a45a4bb5db4aa866f5d2ae87dc7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScoreManager
-  scoreBigText: {fileID: 1114976589}
-  scoreLabelText: {fileID: 2135107424}
+  scoreText: {fileID: 0}
+  scoreTextNames:
+  - ScoreBigText
+  - ScoreText
+  - Score
 --- !u!4 &445830605
 Transform:
   m_ObjectHideFlags: 0
@@ -876,8 +879,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 24
-  m_fontSizeBase: 24
+  m_fontSize: 50
+  m_fontSizeBase: 50
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -1186,6 +1189,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d2829db57de5309469f34a30edd91b7e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DoofusMovement
+  inspectorSpeed: 4
 --- !u!114 &629340658
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2244,11 +2248,11 @@ MonoBehaviour:
   startPanel: {fileID: 779211846}
   gameOverPanel: {fileID: 1010820759}
   startButton: {fileID: 979295221}
-  restartButton: {fileID: 683236792}
   finalScoreText: {fileID: 0}
+  restartButton: {fileID: 683236792}
   quitButton: {fileID: 0}
   musicSource: {fileID: 1570981831}
-  useGameStateManagerForRestart: 1
+  autoFindByName: 1
 --- !u!4 &1686244885
 Transform:
   m_ObjectHideFlags: 0
