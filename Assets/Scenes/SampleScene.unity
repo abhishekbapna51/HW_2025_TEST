@@ -137,7 +137,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &7877483
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -517,8 +517,8 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.3
-  far clip plane: 1000
-  field of view: 60
+  far clip plane: 1200
+  field of view: 90
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -609,8 +609,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CameraFollow
   target: {fileID: 629340656}
   offset: {x: 0, y: 6, z: -10}
-  followSpeed: 6
-  lookAtHeightOffset: 1.5
+  moveSmoothTime: 0.15
+  rotateSmoothTime: 0.12
+  enableDynamicZoom: 1
+  minFOV: 55
+  maxFOV: 80
+  zoomSmoothTime: 0.35
+  pulpitSpreadToMaxFOV: 10
+  clampToBounds: 0
+  minXMaxX: {x: -50, y: 50}
+  minZMaxZ: {x: -50, y: 50}
 --- !u!1 &410087039
 GameObject:
   m_ObjectHideFlags: 0
@@ -1244,7 +1252,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 0.6431373, g: 1, b: 0, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -1968,10 +1976,10 @@ AudioSource:
   OutputAudioMixerGroup: {fileID: 0}
   m_audioClip: {fileID: 0}
   m_Resource: {fileID: 8300000, guid: 39f889ffa087bc54a8e1e03262a2c794, type: 3}
-  m_PlayOnAwake: 1
+  m_PlayOnAwake: 0
   m_Volume: 1
   m_Pitch: 1
-  Loop: 0
+  Loop: 1
   Mute: 0
   Spatialize: 0
   SpatializePostEffects: 0
@@ -2112,7 +2120,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1586054159}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
   m_Name: 
@@ -2236,9 +2244,11 @@ MonoBehaviour:
   startPanel: {fileID: 779211846}
   gameOverPanel: {fileID: 1010820759}
   startButton: {fileID: 979295221}
-  finalScoreText: {fileID: 0}
   restartButton: {fileID: 683236792}
-  quitButton: {fileID: 7877483}
+  finalScoreText: {fileID: 0}
+  quitButton: {fileID: 0}
+  musicSource: {fileID: 1570981831}
+  useGameStateManagerForRestart: 1
 --- !u!4 &1686244885
 Transform:
   m_ObjectHideFlags: 0
