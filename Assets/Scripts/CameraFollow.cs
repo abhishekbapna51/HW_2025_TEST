@@ -1,36 +1,89 @@
-using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine;
 
+[RequireComponent(typeof(Camera))]
 public class CameraFollow : MonoBehaviour
 {
-    public Transform target;
-    public Vector3 offset = new Vector3(0f, 6f, -10f);
-    public float followSpeed = 6f;
-    public float lookAtHeightOffset = 1.5f;
+    [Header("Target")]
+    public Transform target;                // Drag Doofus here
+
+    [Header("Follow settings")]
+    public Vector3 offset = new Vector3(0f, 6f, -10f); // default camera offset from target
+    public float moveSmoothTime = 0.15f;
+    public float rotateSmoothTime = 0.12f;
+
+    [Header("Dynamic zoom (optional)")]
+    public bool enableDynamicZoom = true;
+    public float minFOV = 55f;
+    public float maxFOV = 80f;
+    public float zoomSmoothTime = 0.35f;
+    public float pulpitSpreadToMaxFOV = 10f; // how large spread causes max zoom
+
+    [Header("Bounds (optional)")]
+    public bool clampToBounds = false;
+    public Vector2 minXMaxX = new Vector2(-50f, 50f);
+    public Vector2 minZMaxZ = new Vector2(-50f, 50f);
+
+    Camera cam;
+    Vector3 currentVelocity;
+    float fovVelocity;
+
+    void Start()
+    {
+        cam = GetComponent<Camera>();
+        if (cam == null) cam = Camera.main;
+        if (target == null)
+        {
+            Debug.LogWarning("[CameraFollow] No target assigned. Drag your Doofus Transform into the inspector.");
+        }
+    }
 
     void LateUpdate()
     {
         if (target == null) return;
 
+        // desired world pos = target position + offset rotated by target yaw (optional)
         Vector3 desiredPos = target.position + offset;
 
-        // Try to gently include pulpits if available
-        if (PulpitSpawner.Instance != null)
+        // optional clamping to level bounds
+        if (clampToBounds)
         {
-            List<Vector3> pulpits = PulpitSpawner.Instance.GetActivePulpitsWorldPositions();
-            if (pulpits != null && pulpits.Count > 0)
-            {
-                Vector3 avg = Vector3.zero;
-                foreach (var p in pulpits) avg += p;
-                avg /= pulpits.Count;
-                Vector3 combined = Vector3.Lerp(target.position, avg, 0.35f);
-                desiredPos = combined + offset;
-            }
+            desiredPos.x = Mathf.Clamp(desiredPos.x, minXMaxX.x, minXMaxX.y);
+            desiredPos.z = Mathf.Clamp(desiredPos.z, minZMaxZ.x, minZMaxZ.y);
         }
 
-        transform.position = Vector3.Lerp(transform.position, desiredPos, Time.deltaTime * followSpeed);
+        // smooth move
+        transform.position = Vector3.SmoothDamp(transform.position, desiredPos, ref currentVelocity, moveSmoothTime);
 
-        Vector3 lookAtPoint = target.position + Vector3.up * lookAtHeightOffset;
-        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookAtPoint - transform.position), Time.deltaTime * followSpeed * 0.6f);
+        // smooth rotate to look at target (keep camera upright)
+        Vector3 lookDir = (target.position - transform.position).normalized;
+        Quaternion desiredRot = Quaternion.LookRotation(lookDir, Vector3.up);
+        transform.rotation = Quaternion.Slerp(transform.rotation, desiredRot, Time.deltaTime / Mathf.Max(0.0001f, rotateSmoothTime));
+
+        // dynamic zoom (adjust FOV)
+        if (enableDynamicZoom && PulpitSpawner.Instance != null)
+        {
+            List<Vector3> pulpits = PulpitSpawner.Instance.GetActivePulpitsWorldPositions();
+            float spread = CalculateMaxSpread(target.position, pulpits);
+            float t = Mathf.Clamp01(spread / pulpitSpreadToMaxFOV);
+            float desiredFOV = Mathf.Lerp(minFOV, maxFOV, t);
+            cam.fieldOfView = Mathf.SmoothDamp(cam.fieldOfView, desiredFOV, ref fovVelocity, zoomSmoothTime);
+        }
+    }
+
+    // returns the largest horizontal distance between the player and any pulpit (in world XZ plane)
+    float CalculateMaxSpread(Vector3 playerPos, List<Vector3> pulpitPositions)
+    {
+        if (pulpitPositions == null || pulpitPositions.Count == 0) return 0f;
+
+        float maxDist = 0f;
+        foreach (var p in pulpitPositions)
+        {
+            Vector2 a = new Vector2(playerPos.x, playerPos.z);
+            Vector2 b = new Vector2(p.x, p.z);
+            float d = Vector2.Distance(a, b);
+            if (d > maxDist) maxDist = d;
+        }
+        return maxDist;
     }
 }
