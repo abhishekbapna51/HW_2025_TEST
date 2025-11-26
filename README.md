@@ -109,7 +109,7 @@ Uses a persistent AudioSource auto-bound by UIManager.
 ![Game Over](Screenshots/gameover.png)
 
 🖼️ Demo video
-![Demo Video](Screenshots/Demo_Video_GAMEPLAY.mp4)
+![Demo Video](Screenshots/demovideo2.mp4)
 
 👨‍💻 Developed by:
 Abhishek Bapna (22BCE3195)
